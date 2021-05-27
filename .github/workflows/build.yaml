@@ -12,6 +12,9 @@ jobs:
         python-version: [3.7, 3.8, 3.9]
     steps:
     - uses: actions/checkout@v2
+      with:
+        # Disabling shallow clone for SonarQube
+        fetch-depth: 0
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
@@ -21,10 +24,24 @@ jobs:
         sudo add-apt-repository -u -y ppa:s-ramacher/ait
         sudo apt-get install librelic-dev pkg-config
         python -m pip install --upgrade pip
-        pip install pytest python-relic build
+        pip install pytest pytest-cov python-relic build
     - name: Build with Python ${{ matrix.python-version }}
       run: |
         python -m build
     - name: Test with pytest
       run: |
-        pytest .
+        pytest --cov=./ --cov-report=xml .
+    - name: Upload coverage results to SonarQube
+      uses: sonarsource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONARCLOUD_URL: https://sonari.atosresearch.eu
+      with:
+        args: >
+          -Dsonar.projectKey=mpc-key-sharing
+          -Dsonar.projectName=mpc-key-sharing
+          -Dsonar.python.coverage.reportPaths=coverage.xml
+          -Dsonar.sources=KrakenKeySharing/
+          -Dsonar.exclusions=KrakenKeySharing/tests/**
+          -Dsonar.tests=KrakenKeySharing/tests/
