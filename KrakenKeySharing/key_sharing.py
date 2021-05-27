@@ -297,7 +297,7 @@ class Ciphertext:
 
 
 def encaps(
-    sk: UserPrivateKey, nodes: Sequence[HPREPublicKey], k: Optional[BN] = None
+    sk: UserPrivateKey, nodes: Sequence[HPREPublicKey]
 ) -> Tuple[GT, bytes, Tuple[Ciphertext, ...]]:
     """Encaps a freshly sampled key shared with respect to the given MPC nodes.
 
@@ -311,10 +311,6 @@ def encaps(
     tau = os.urandom(32)
     # Produce random shares
     ks = [rand_BN_order() for _ in range(num_nodes)]
-    if k is None:
-        k = sum(ks, neutral_BN()) % pyrelic.order()
-    else:
-        ks[-1] = sum(ks[:-1], -k) % pyrelic.order()
 
     rs = tuple(rand_G1() for _ in range(num_nodes))
     g2 = generator_G2()
@@ -339,7 +335,7 @@ def encaps(
     )
 
     return (
-        pair(pp.gs[0] ** k, generator_G2()),
+        pair(pp.gs[0] ** (sum(ks, neutral_BN()) % pyrelic.order()), generator_G2()),
         tau,
         tuple(Ciphertext(sigma, c) for sigma, c in zip(sigmas, cs)),
     )
