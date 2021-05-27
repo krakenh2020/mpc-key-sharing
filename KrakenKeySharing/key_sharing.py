@@ -378,7 +378,8 @@ def aggregate(
         return HPRECiphertext(
             cs[0].level,
             tuple(
-                _prod((cast(Sequence[GT], c.c0)[idx] for c in cs)) for idx in range(length)
+                _prod((cast(Sequence[GT], c.c0)[idx] for c in cs))
+                for idx in range(length)
             ),
             tuple(_prod((cast(GT, c.cs[idx]) for c in cs)) for idx in range(length)),
         )
