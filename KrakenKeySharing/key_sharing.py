@@ -132,9 +132,9 @@ def _hpra_hash(*args: Any) -> G1:
     return hash_to_G1(b"|".join(bytes(arg) for arg in args))
 
 
-def _hpra_vgen(pp: HPRAParams) -> Tuple[_HPRAVMK, None]:
+def _hpra_vgen(pp: HPRAParams) -> _HPRAVMK:
     alpha = rand_BN_order()
-    return _HPRAVMK(alpha, pp), None
+    return _HPRAVMK(alpha, pp)
 
 
 def _hpra_sign(sk: HPRASPrivateKey, messages: Sequence[BN], tau: bytes, id_=None) -> G1:
@@ -277,7 +277,7 @@ def user_key_gen(pp: HPRAParams) -> Tuple[UserPrivateKey, UserPublicKey]:
     """Generate key pair for a user."""
 
     sk, pk = _hpra_sgen(pp)
-    vk, _ = _hpra_vgen(pp)
+    vk = _hpra_vgen(pp)
     rsk, rpk = _hpre_keygen(pp.length + 1)
 
     return UserPrivateKey(sk, vk, rsk, rpk), UserPublicKey(pk, rpk)
