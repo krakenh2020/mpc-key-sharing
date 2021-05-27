@@ -312,9 +312,9 @@ def encaps(
     # Produce random shares
     ks = [rand_BN_order() for _ in range(num_nodes)]
     if k is None:
-        k = sum(ks, start=neutral_BN()) % pyrelic.order()
+        k = sum(ks, neutral_BN()) % pyrelic.order()
     else:
-        ks[-1] = sum(ks[:-1], start=-k) % pyrelic.order()
+        ks[-1] = sum(ks[:-1], -k) % pyrelic.order()
 
     rs = tuple(rand_G1() for _ in range(num_nodes))
     g2 = generator_G2()
