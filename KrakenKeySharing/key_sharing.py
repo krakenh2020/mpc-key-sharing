@@ -68,7 +68,7 @@ def _prod(values: Iterable[GT], start: Optional[GT] = None) -> GT:
 
 # The HPRA and HPRE implementations are based on examples/hpra.py from python-relic
 # which is licensed under the MIT license and copyright 2021 Sebastian Ramacher
-# <sebastian.ramacher@ait.ac.at>
+# <sebastian.ramacher@ait.ac.at>. Features not required in this example, were removed.
 
 
 @dataclass
@@ -137,7 +137,7 @@ def _hpra_vgen(pp: HPRAParams) -> Tuple[_HPRAVMK, None]:
     return _HPRAVMK(alpha, pp), None
 
 
-def _hpra_sign(sk: HPRASPrivateKey, messages: Sequence[BN], tau: Any, id_=None) -> G1:
+def _hpra_sign(sk: HPRASPrivateKey, messages: Sequence[BN], tau: bytes, id_=None) -> G1:
     sigma = _hpra_hash(tau, id_ if id_ is not None else sk.pk.pk1)
     sigma = mul_sim_G1(sk.pk.pp.gs, messages, sigma)
     return sigma ** sk.beta
@@ -395,7 +395,7 @@ def aggregate(
 def decaps(
     sk: UserPrivateKey,
     ciphertext: AggCiphertext,
-    tau: Any,
+    tau: bytes,
     ids: Sequence[HPREPublicKey],
 ) -> Optional[GT]:
     """Verify and decaps authenticated key.
@@ -405,19 +405,8 @@ def decaps(
 
     def averify(mk: _HPRAVMK, msg: GT, mu: GT) -> bool:
         ghat = generator_G2()
-        muprime = (
-            msg
-            * pair_product(
-                *(
-                    (
-                        _hpra_hash(tau, node),
-                        ghat,
-                    )
-                    for node in ids
-                ),
-            )
-        ) ** mk.alpha
-        return muprime == mu
+        muprime = msg * pair_product(*((_hpra_hash(tau, node), ghat) for node in ids))
+        return muprime ** mk.alpha == mu
 
     ms = _hpre_decrypt(sk.rsk, ciphertext.c)
     msu, r = ms[0], ms[1]
