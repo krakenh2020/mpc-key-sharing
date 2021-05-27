@@ -25,15 +25,15 @@ import enum
 import struct
 from dataclasses import dataclass, field
 from typing import (
-    Union,
-    Sequence,
     Any,
-    Optional,
     Callable,
-    cast,
+    Iterable,
+    Optional,
+    Sequence,
     Tuple,
-    Iterator,
     TypeVar,
+    Union,
+    cast,
 )
 
 import pyrelic
@@ -58,11 +58,11 @@ from pyrelic import (
 T = TypeVar("T")
 
 
-def _prod(iter: Iterator[GT], start: Optional[GT] = None) -> GT:
+def _prod(values: Iterable[GT], start: Optional[GT] = None) -> GT:
     """math.prod from Python 3.8+ for GT elements"""
 
     result = start if start is not None else neutral_GT()
-    for value in iter:
+    for value in values:
         result *= value
     return result
 
@@ -76,18 +76,18 @@ def _prod(iter: Iterator[GT], start: Optional[GT] = None) -> GT:
 class HPRAParams:
     """Public parameters for HPRA."""
 
-    l: int
+    length: int
     gs: Tuple[G1, ...]
 
 
-def _hpra_params(l: int) -> HPRAParams:
+def _hpra_params(length: int) -> HPRAParams:
     """Generate public parameters for HPRA."""
 
     return HPRAParams(
-        l,
+        length,
         tuple(
             hash_to_G1(b" ".join((b"public params", struct.pack("<L", i))))
-            for i in range(l)
+            for i in range(length)
         ),
     )
 
@@ -138,9 +138,9 @@ def _hpra_vgen(pp: HPRAParams) -> Tuple[_HPRAVMK, None]:
     return _HPRAVMK(alpha, pp), None
 
 
-def _hpra_sign(sk: HPRASPrivateKey, ms: Sequence[BN], tau: Any, id_=None) -> G1:
+def _hpra_sign(sk: HPRASPrivateKey, messages: Sequence[BN], tau: Any, id_=None) -> G1:
     sigma = _hpra_hash(tau, id_ if id_ is not None else sk.pk.pk1)
-    sigma = mul_sim_G1(sk.pk.pp.gs, ms, sigma)
+    sigma = mul_sim_G1(sk.pk.pp.gs, messages, sigma)
     return sigma ** sk.beta
 
 
@@ -152,11 +152,11 @@ def _hpra_vrgen(pk: HPRASPublicKey, mk: _HPRAVMK) -> HPRAAK:
 def _hpra_agg(
     aks: Sequence[HPRAAK],
     sigmas: Sequence[G1],
-    msgs: Sequence[T],
+    messages: Sequence[T],
     weights: Sequence[BN],
     evalf: Callable[[Sequence[T], Sequence[BN]], T],
 ) -> Tuple[T, GT]:
-    msg = evalf(msgs, weights)
+    msg = evalf(messages, weights)
     mu = pair_product(
         *((sigma ** weight, ak.ak) for sigma, weight, ak in zip(sigmas, weights, aks))
     )
@@ -165,14 +165,14 @@ def _hpra_agg(
 
 @dataclass
 class HPREPrivateKey:
-    a1: Sequence[BN]
-    a2: Sequence[BN]
+    a1: Tuple[BN, ...]
+    a2: Tuple[BN, ...]
 
 
 @dataclass
 class HPREPublicKey:
-    pk1: Sequence[GT]
-    pk2: Sequence[G2]
+    pk1: Tuple[GT, ...]
+    pk2: Tuple[G2, ...]
 
     def __bytes__(self) -> bytes:
         return b"||".join(
@@ -183,10 +183,10 @@ class HPREPublicKey:
         )
 
 
-def _hpre_keygen(l: int) -> Tuple[HPREPrivateKey, HPREPublicKey]:
-    assert l >= 1
-    a1 = tuple(rand_BN_order() for _ in range(l))
-    a2 = tuple(rand_BN_order() for _ in range(l))
+def _hpre_keygen(length: int) -> Tuple[HPREPrivateKey, HPREPublicKey]:
+    assert length >= 1
+    a1 = tuple(rand_BN_order() for _ in range(length))
+    a2 = tuple(rand_BN_order() for _ in range(length))
 
     sk = HPREPrivateKey(a1, a2)
     pk = HPREPublicKey(
@@ -199,7 +199,7 @@ def _hpre_keygen(l: int) -> Tuple[HPREPrivateKey, HPREPublicKey]:
 
 @dataclass
 class HPREReEncKey:
-    rk: Sequence[G2]
+    rk: Tuple[G2, ...]
 
 
 def _hpre_rg(sk: HPREPrivateKey, pk: HPREPublicKey) -> HPREReEncKey:
@@ -214,33 +214,35 @@ class _HPRECiphertextLevel(enum.Enum):
 @dataclass
 class HPRECiphertext:
     level: _HPRECiphertextLevel
-    c0: Union[G1, Sequence[GT]]
-    cs: Sequence[GT]
+    c0: Union[G1, Tuple[GT, ...]]
+    cs: Tuple[GT, ...]
 
 
 def _hpre_encrypt(
     pk: HPREPublicKey,
-    ms: Sequence[GT],
+    messages: Sequence[GT],
 ) -> HPRECiphertext:
     k = rand_BN_order()
-    cs = tuple(m * pk1 ** k for m, pk1 in zip(ms, pk.pk1))
+    cs = tuple(m * pk1 ** k for m, pk1 in zip(messages, pk.pk1))
     return HPRECiphertext(_HPRECiphertextLevel.L2, generator_G1(k), cs)
 
 
-def _hpre_rencrypt(rk: HPREReEncKey, c: HPRECiphertext) -> HPRECiphertext:
-    assert c.level == _HPRECiphertextLevel.L2
+def _hpre_rencrypt(rk: HPREReEncKey, ciphertext: HPRECiphertext) -> HPRECiphertext:
+    assert ciphertext.level == _HPRECiphertextLevel.L2
     return HPRECiphertext(
-        _HPRECiphertextLevel.LR, tuple(pair(cast(G1, c.c0), r) for r in rk.rk), c.cs
+        _HPRECiphertextLevel.LR,
+        tuple(pair(cast(G1, ciphertext.c0), r) for r in rk.rk),
+        ciphertext.cs,
     )
 
 
-def _hpre_decrypt(sk: HPREPrivateKey, c: HPRECiphertext) -> Tuple[GT, ...]:
-    assert c.level == _HPRECiphertextLevel.LR
+def _hpre_decrypt(sk: HPREPrivateKey, ciphertext: HPRECiphertext) -> Tuple[GT, ...]:
+    assert ciphertext.level == _HPRECiphertextLevel.LR
 
     order = pyrelic.order()
     return tuple(
         c1 / c0 ** a2.mod_inv(order)
-        for c0, c1, a2 in zip(cast(Sequence[GT], c.c0), c.cs, sk.a2)
+        for c0, c1, a2 in zip(cast(Sequence[GT], ciphertext.c0), ciphertext.cs, sk.a2)
     )
 
 
@@ -277,7 +279,7 @@ def user_key_gen(pp: HPRAParams) -> Tuple[UserPrivateKey, UserPublicKey]:
 
     sk, pk = _hpra_sgen(pp)
     vk, _ = _hpra_vgen(pp)
-    rsk, rpk = _hpre_keygen(pp.l + 1)
+    rsk, rpk = _hpre_keygen(pp.length + 1)
 
     return UserPrivateKey(sk, vk, rsk, rpk), UserPublicKey(pk, rpk)
 
@@ -285,7 +287,7 @@ def user_key_gen(pp: HPRAParams) -> Tuple[UserPrivateKey, UserPublicKey]:
 def mpc_node_key_gen(pp: HPRAParams) -> Tuple[HPREPrivateKey, HPREPublicKey]:
     """Generate key pair for a MPC node."""
 
-    return _hpre_keygen(pp.l + 1)
+    return _hpre_keygen(pp.length + 1)
 
 
 @dataclass
@@ -295,31 +297,31 @@ class Ciphertext:
 
 
 def encaps(
-    sk: UserPrivateKey, mpc_nodes: Sequence[HPREPublicKey], k: Optional[BN] = None
+    sk: UserPrivateKey, nodes: Sequence[HPREPublicKey], k: Optional[BN] = None
 ) -> Tuple[GT, bytes, Tuple[Ciphertext, ...]]:
     """Encaps a freshly sampled key shared with respect to the given MPC nodes.
 
     Returns the key, the tag tau and the ciphertexts.
     """
 
-    l = len(mpc_nodes)
-    assert l >= 3
+    num_nodes = len(nodes)
+    assert num_nodes >= 3
 
     pp = sk.pp
     tau = os.urandom(32)
     # Produce random shares
-    ks = [rand_BN_order() for _ in range(l)]
+    ks = [rand_BN_order() for _ in range(num_nodes)]
     if k is None:
         k = sum(ks, start=neutral_BN()) % pyrelic.order()
     else:
         ks[-1] = sum(ks[:-1], start=-k) % pyrelic.order()
 
-    rs = tuple(rand_G1() for _ in range(l))
+    rs = tuple(rand_G1() for _ in range(num_nodes))
     g2 = generator_G2()
     # Produce signatures
     sigmas = (
-        _hpra_sign(sk.sk, (ki,), tau, bytes(mpc_node)) * r
-        for ki, r, mpc_node in zip(ks, rs, mpc_nodes)
+        _hpra_sign(sk.sk, (ki,), tau, bytes(node)) * r
+        for ki, r, node in zip(ks, rs, nodes)
     )
     # Produce ciphertexts
     cs = (
@@ -333,7 +335,7 @@ def encaps(
                 )
             ),
         )
-        for ki, ri, mpc_node in zip(ks, rs, mpc_nodes)
+        for ki, ri, mpc_node in zip(ks, rs, nodes)
     )
 
     return (
@@ -372,13 +374,13 @@ def aggregate(
     """Aggregate and reencrypt ciphertexts."""
 
     def evalcs(cs: Sequence[HPRECiphertext], _: Any) -> HPRECiphertext:
-        l = len(cs[0].cs)
+        length = len(cs[0].cs)
         return HPRECiphertext(
             cs[0].level,
             tuple(
-                _prod((cast(Sequence[GT], c.c0)[idx] for c in cs)) for idx in range(l)
+                _prod((cast(Sequence[GT], c.c0)[idx] for c in cs)) for idx in range(length)
             ),
-            tuple(_prod((cast(GT, c.cs[idx]) for c in cs)) for idx in range(l)),
+            tuple(_prod((cast(GT, c.cs[idx]) for c in cs)) for idx in range(length)),
         )
 
     return AggCiphertext(
@@ -406,19 +408,17 @@ def decaps(
     Returns the key if verification succeeds and None otherwise.
     """
 
-    def hpra_averify(
-        mk: _HPRAVMK, msg: GT, mu: GT, tau: Any, ids: Sequence[HPREPublicKey]
-    ) -> bool:
+    def averify(mk: _HPRAVMK, msg: GT, mu: GT) -> bool:
         ghat = generator_G2()
         muprime = (
             msg
             * pair_product(
                 *(
                     (
-                        _hpra_hash(tau, mpc_node),
+                        _hpra_hash(tau, node),
                         ghat,
                     )
-                    for mpc_node in ids
+                    for node in ids
                 ),
             )
         ) ** mk.alpha
@@ -426,8 +426,4 @@ def decaps(
 
     ms = _hpre_decrypt(sk.rsk, ciphertext.c)
     msu, r = ms[0], ms[1]
-    return (
-        msu
-        if hpra_averify(sk.vk, msu, ciphertext.mu / (r ** sk.vk.alpha), tau, ids)
-        else None
-    )
+    return msu if averify(sk.vk, msu, ciphertext.mu / (r ** sk.vk.alpha)) else None
