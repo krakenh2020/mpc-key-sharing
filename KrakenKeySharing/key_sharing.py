@@ -39,7 +39,6 @@ from typing import (
 import pyrelic
 from pyrelic import (
     BN,
-    BN_from_int,
     neutral_BN,
     G1,
     G2,
@@ -153,13 +152,10 @@ def _hpra_agg(
     aks: Sequence[HPRAAK],
     sigmas: Sequence[G1],
     messages: Sequence[T],
-    weights: Sequence[BN],
-    evalf: Callable[[Sequence[T], Sequence[BN]], T],
+    evalf: Callable[[Sequence[T]], T],
 ) -> Tuple[T, GT]:
-    msg = evalf(messages, weights)
-    mu = pair_product(
-        *((sigma ** weight, ak.ak) for sigma, weight, ak in zip(sigmas, weights, aks))
-    )
+    msg = evalf(messages)
+    mu = pair_product(*((sigma, ak.ak) for sigma, ak in zip(sigmas, aks)))
     return msg, mu
 
 
@@ -173,6 +169,9 @@ class HPREPrivateKey:
 class HPREPublicKey:
     pk1: Tuple[GT, ...]
     pk2: Tuple[G2, ...]
+
+    def __post_init__(self):
+        assert len(self.pk1) == len(self.pk2)
 
     def __bytes__(self) -> bytes:
         return b"||".join(
@@ -284,8 +283,8 @@ def user_key_gen(pp: HPRAParams) -> Tuple[UserPrivateKey, UserPublicKey]:
     return UserPrivateKey(sk, vk, rsk, rpk), UserPublicKey(pk, rpk)
 
 
-def mpc_node_key_gen(pp: HPRAParams) -> Tuple[HPREPrivateKey, HPREPublicKey]:
-    """Generate key pair for a MPC node."""
+def node_key_gen(pp: HPRAParams) -> Tuple[HPREPrivateKey, HPREPublicKey]:
+    """Generate key pair for a node."""
 
     return _hpre_keygen(pp.length + 1)
 
@@ -299,7 +298,7 @@ class Ciphertext:
 def encaps(
     sk: UserPrivateKey, nodes: Sequence[HPREPublicKey]
 ) -> Tuple[GT, bytes, Tuple[Ciphertext, ...]]:
-    """Encaps a freshly sampled key shared with respect to the given MPC nodes.
+    """Encaps a freshly sampled key shared with respect to the given nodes.
 
     Returns the key, the tag tau and the ciphertexts.
     """
@@ -322,7 +321,7 @@ def encaps(
     # Produce ciphertexts
     cs = (
         _hpre_encrypt(
-            mpc_node,
+            node,
             tuple(
                 pair(lhs, rhs)
                 for lhs, rhs in (
@@ -331,7 +330,7 @@ def encaps(
                 )
             ),
         )
-        for ki, ri, mpc_node in zip(ks, rs, nodes)
+        for ki, ri, node in zip(ks, rs, nodes)
     )
 
     return (
@@ -369,7 +368,7 @@ def aggregate(
 ) -> AggCiphertext:
     """Aggregate and reencrypt ciphertexts."""
 
-    def evalcs(cs: Sequence[HPRECiphertext], _: Any) -> HPRECiphertext:
+    def evalcs(cs: Sequence[HPRECiphertext]) -> HPRECiphertext:
         length = len(cs[0].cs)
         return HPRECiphertext(
             cs[0].level,
@@ -388,7 +387,6 @@ def aggregate(
                 _hpre_rencrypt(rk, ciphertext.c)
                 for rk, ciphertext in zip(rks, ciphertexts)
             ),
-            [BN_from_int(1)] * len(rks),  # weights
             evalcs,
         )
     )

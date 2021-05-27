@@ -23,7 +23,7 @@ from KrakenKeySharing.key_sharing import (
     aggregate,
     decaps,
     encaps,
-    mpc_node_key_gen,
+    node_key_gen,
     node_rekey_gen,
     params,
     user_aggkey_gen,
@@ -38,19 +38,19 @@ class TestKeySharing(unittest.TestCase):
         self.user1 = (sk1, pk1) = user_key_gen(self.pp)
         self.user2 = (sk2, pk2) = user_key_gen(self.pp)
 
-        # Generate four MPC node keys
-        self.node1 = (sk_mpc1, pk_mpc1) = mpc_node_key_gen(self.pp)
-        self.node2 = (sk_mpc2, pk_mpc2) = mpc_node_key_gen(self.pp)
-        self.node3 = (sk_mpc3, pk_mpc3) = mpc_node_key_gen(self.pp)
-        self.node4 = (sk_mpc4, pk_mpc4) = mpc_node_key_gen(self.pp)
+        # Generate four node keys
+        self.node1 = node_key_gen(self.pp)
+        self.node2 = node_key_gen(self.pp)
+        self.node3 = node_key_gen(self.pp)
+        self.node4 = node_key_gen(self.pp)
 
         # Compute aggregation and re-encryption keys
         self.ak = user_aggkey_gen(sk2, pk1)
-        self.rk1 = node_rekey_gen(sk_mpc1, pk2)
-        self.rk2 = node_rekey_gen(sk_mpc2, pk2)
-        self.rk3 = node_rekey_gen(sk_mpc3, pk2)
-        self.rk4 = node_rekey_gen(sk_mpc4, pk2)
-        self.rk5 = node_rekey_gen(sk_mpc4, pk1)
+        self.rk1 = node_rekey_gen(self.node1[0], pk2)
+        self.rk2 = node_rekey_gen(self.node2[0], pk2)
+        self.rk3 = node_rekey_gen(self.node3[0], pk2)
+        self.rk4 = node_rekey_gen(self.node4[0], pk2)
+        self.rk5 = node_rekey_gen(self.node4[0], pk1)
 
     def test_normal(self) -> None:
         nodes = (self.node1[1], self.node2[1], self.node3[1])
