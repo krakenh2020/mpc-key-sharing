@@ -44,4 +44,4 @@ Institute of Technology).
 ## Acknowledgements
 
 This work has been funded by the European Union’s Horizon 2020 research and innovation
-programme under grant agreement No 871473 ([KRAKEN](https://krakenh2020.eu/)).
+programme under grant agreement No. 871473 ([KRAKEN](https://krakenh2020.eu/)).
